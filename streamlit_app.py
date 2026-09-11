@@ -85,6 +85,42 @@ def offline_answer(question, location, pfz):
         "Do not treat this result as a safety clearance; follow official marine warnings."
     )
 
+
+def localized_answer(language, pfz):
+    values = (
+        f"{pfz['latitude']:.4f}, {pfz['longitude']:.4f}",
+        f"{pfz['distance_km']:.1f}",
+        str(pfz["sst_c"]),
+        str(pfz["chlorophyll_mg_m3"]),
+    )
+    answers = {
+        "മലയാളം": (
+            f"നിങ്ങളുടെ സ്ഥലത്തിന് ഏറ്റവും അടുത്തുള്ള PFZ: **{values[0]}**\n\n"
+            f"ദൂരം: **{values[1]} കിലോമീറ്റർ**\n\n"
+            f"കടൽ ഉപരിതല താപനില: **{values[2]}°C**\n\n"
+            f"ക്ലോറോഫിൽ: **{values[3]} mg/m³**\n\n"
+            "തത്സമയ കാലാവസ്ഥ, വേലിയേറ്റം, ചുഴലിക്കാറ്റ്, മിന്നൽ, ജിയോഫെൻസിംഗ് വിവരങ്ങൾ ലഭ്യമല്ല. "
+            "യാത്രയ്ക്ക് മുമ്പ് ഔദ്യോഗിക കടൽ മുന്നറിയിപ്പുകൾ പരിശോധിക്കുക."
+        ),
+        "தமிழ்": (
+            f"உங்கள் இருப்பிடத்திற்கு அருகிலுள்ள PFZ: **{values[0]}**\n\n"
+            f"தூரம்: **{values[1]} கி.மீ.**\n\n"
+            f"கடல் மேற்பரப்பு வெப்பநிலை: **{values[2]}°C**\n\n"
+            f"குளோரோபில்: **{values[3]} mg/m³**\n\n"
+            "நேரடி வானிலை, அலை, சூறாவளி, மின்னல் மற்றும் கட்டுப்பாட்டு தகவல்கள் இல்லை. "
+            "பயணத்திற்கு முன் அதிகாரப்பூர்வ கடல் எச்சரிக்கைகளைச் சரிபார்க்கவும்."
+        ),
+        "हिन्दी": (
+            f"आपके स्थान के लिए सबसे नज़दीकी PFZ: **{values[0]}**\n\n"
+            f"दूरी: **{values[1]} किमी**\n\n"
+            f"समुद्री सतह का तापमान: **{values[2]}°C**\n\n"
+            f"क्लोरोफिल: **{values[3]} mg/m³**\n\n"
+            "लाइव मौसम, ज्वार, चक्रवात, बिजली और प्रतिबंधित क्षेत्र की जानकारी उपलब्ध नहीं है। "
+            "यात्रा से पहले आधिकारिक समुद्री चेतावनियां जांचें।"
+        ),
+    }
+    return answers.get(language, offline_answer("", None, pfz))
+
 TRANSLATIONS = {
     "English": {
         "title": "OceanAI Fishing Assistant",
@@ -101,6 +137,10 @@ TRANSLATIONS = {
         "route": "Proposed route (straight-line only)",
         "gps": "Use current GPS location",
         "voyage_pack": "Download voyage map pack",
+        "map": "PFZ map",
+        "chat": "OceanAI Chat",
+        "caption": "Satellite-derived PFZ indications are not a guarantee of fish availability.",
+        "questions": [],
     },
     "മലയാളം": {
         "title": "OceanAI മത്സ്യബന്ധന സഹായി",
@@ -117,6 +157,10 @@ TRANSLATIONS = {
         "route": "നിർദ്ദേശിച്ച യാത്രാമാർഗം (നേരിട്ടുള്ള രേഖ മാത്രം)",
         "gps": "നിലവിലെ GPS സ്ഥലം ഉപയോഗിക്കുക",
         "voyage_pack": "യാത്രാ മാപ്പ് പാക്ക് ഡൗൺലോഡ് ചെയ്യുക",
+        "map": "PFZ മാപ്പ്",
+        "chat": "OceanAI ചാറ്റ്",
+        "caption": "സാറ്റലൈറ്റ് വിവരങ്ങളിൽ നിന്നുള്ള PFZ സൂചനകൾ മത്സ്യം ലഭിക്കുമെന്ന ഉറപ്പല്ല.",
+        "questions": ["ഇന്നത്തെ ഏറ്റവും അടുത്തുള്ള സാധ്യതയുള്ള മത്സ്യബന്ധന മേഖല (PFZ) ഏതാണ്?", "നാളെ രാവിലെ കടലിൽ പോകുന്നത് സുരക്ഷിതമാണോ?", "എന്റെ മത്സ്യബന്ധന സ്ഥലത്തെ വേലിയേറ്റം, കാലാവസ്ഥ, കടൽസ്ഥിതി എന്താണ്?", "എന്റെ പ്രദേശത്ത് മിന്നൽ അല്ലെങ്കിൽ ചുഴലിക്കാറ്റ് മുന്നറിയിപ്പുണ്ടോ?", "ഉയർന്ന ക്ലോറോഫിൽ സാന്ദ്രതയും അനുയോജ്യമായ കടൽ ഉപരിതല താപനിലയുമുള്ള മേഖലകൾ ഏവ?", "മത്സ്യബന്ധന ബോട്ടിന് ഏറ്റവും സുരക്ഷിതമായ യാത്രാമാർഗം ഏതാണ്?", "ഈ തീരപ്രദേശത്ത് മത്സ്യ ഉൽപ്പാദനം കുറഞ്ഞത് എന്തുകൊണ്ട്?", "അപകടകരമോ നിയന്ത്രിതമോ ആയതിനാൽ ഒഴിവാക്കേണ്ട മത്സ്യബന്ധന മേഖലകൾ ഏവ?"],
     },
     "தமிழ்": {
         "title": "OceanAI மீன்பிடி உதவியாளர்",
@@ -133,6 +177,10 @@ TRANSLATIONS = {
         "route": "முன்மொழியப்பட்ட பாதை (நேர்கோடு மட்டும்)",
         "gps": "தற்போதைய GPS இருப்பிடத்தைப் பயன்படுத்து",
         "voyage_pack": "பயண வரைபட தொகுப்பைப் பதிவிறக்கு",
+        "map": "PFZ வரைபடம்",
+        "chat": "OceanAI அரட்டை",
+        "caption": "செயற்கைக்கோள் PFZ தகவல் மீன் கிடைப்பதற்கான உத்தரவாதம் அல்ல.",
+        "questions": ["இன்றைய அருகிலுள்ள சாத்தியமான மீன்பிடி மண்டலம் (PFZ) எது?", "நாளை காலை கடலுக்குச் செல்வது பாதுகாப்பானதா?", "எனது மீன்பிடி இடத்திற்கு அருகிலுள்ள அலை, வானிலை மற்றும் கடல் நிலை என்ன?", "எனது பகுதியில் மின்னல் அல்லது சூறாவளி எச்சரிக்கைகள் உள்ளனவா?", "அதிக குளோரோபில் மற்றும் சாதகமான கடல் மேற்பரப்பு வெப்பநிலை உள்ள பகுதிகள் எவை?", "மீன்பிடி படகிற்கு பாதுகாப்பான பாதை எது?", "இந்தக் கடலோரப் பகுதியில் மீன் உற்பத்தி ஏன் குறைந்தது?", "ஆபத்து அல்லது கட்டுப்பாடுகள் காரணமாக தவிர்க்க வேண்டிய மீன்பிடி மண்டலங்கள் எவை?"],
     },
     "हिन्दी": {
         "title": "OceanAI मछली पकड़ने का सहायक",
@@ -149,6 +197,10 @@ TRANSLATIONS = {
         "route": "प्रस्तावित मार्ग (केवल सीधी रेखा)",
         "gps": "वर्तमान GPS स्थान का उपयोग करें",
         "voyage_pack": "यात्रा मानचित्र पैक डाउनलोड करें",
+        "map": "PFZ मानचित्र",
+        "chat": "OceanAI चैट",
+        "caption": "उपग्रह से प्राप्त PFZ संकेत मछली मिलने की गारंटी नहीं हैं।",
+        "questions": ["आज का सबसे नज़दीकी संभावित मछली पकड़ने का क्षेत्र (PFZ) कहाँ है?", "क्या कल सुबह समुद्र में जाना सुरक्षित है?", "मेरे मछली पकड़ने के स्थान के पास ज्वार, मौसम और समुद्र की स्थिति कैसी है?", "क्या मेरे क्षेत्र में बिजली या चक्रवात की चेतावनी है?", "कौन से क्षेत्रों में अधिक क्लोरोफिल और अनुकूल समुद्री सतह का तापमान है?", "मछली पकड़ने वाली नाव के लिए सबसे सुरक्षित मार्ग कौन सा है?", "इस तटीय क्षेत्र में मछली उत्पादकता क्यों कम हुई?", "खतरनाक या प्रतिबंधित होने के कारण किन मछली पकड़ने वाले क्षेत्रों से बचना चाहिए?"],
     },
 }
 
@@ -162,6 +214,7 @@ QUESTIONS = [
     "Why has fish productivity declined in a particular coastal region?",
     "Which fishing zones should be avoided due to hazardous marine conditions or geofencing restrictions?",
 ]
+TRANSLATIONS["English"]["questions"] = QUESTIONS
 
 st.set_page_config(page_title="OceanAI", page_icon="🌊", layout="wide")
 
@@ -205,7 +258,7 @@ with st.sidebar:
     st.info(t["warning"])
 
 st.title(t["title"])
-st.caption("Satellite-derived PFZ indications are not a guarantee of fish availability.")
+st.caption(t["caption"])
 
 features = load_pfz_features()
 location = st.session_state.location
@@ -232,7 +285,7 @@ with left:
         st.info(t["no_location"])
 
 with right:
-    st.subheader("PFZ map")
+    st.subheader(t["map"])
     points = [
         {"lat": feature["geometry"]["coordinates"][1], "lon": feature["geometry"]["coordinates"][0], "type": "PFZ"}
         for feature in features
@@ -276,8 +329,8 @@ with right:
             use_container_width=True,
         )
 
-st.subheader("OceanAI Chat")
-selected_question = st.selectbox(t["question"], [""] + QUESTIONS)
+st.subheader(t["chat"])
+selected_question = st.selectbox(t["question"], [""] + t["questions"])
 custom_question = st.text_input(t["custom"])
 question = custom_question.strip() or selected_question
 if st.button(t["ask"], type="primary"):
@@ -286,7 +339,7 @@ if st.button(t["ask"], type="primary"):
     elif not question:
         st.error("Choose or enter a question.")
     else:
-        answer = offline_answer(question, location, pfz)
+        answer = localized_answer(language, pfz)
         st.session_state.messages.append(("You", question))
         st.session_state.messages.append(("AI", answer))
 

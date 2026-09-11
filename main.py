@@ -143,7 +143,7 @@ async def query_cloud_ai(prompt: str, boat_lat: float, boat_lon: float, language
         pass
     return None
 
-def process_query_offline(prompt: str, boat_lat: Optional[float] = None, boat_lon: Optional[float] = None) -> str:
+def process_query_offline(prompt: str, boat_lat: Optional[float] = None, boat_lon: Optional[float] = None, language: str = "en") -> str:
     features = load_pfz_features()
     if not features:
         return "Offline Voyage Engine: No satellite datasets loaded in local voyage pack."
@@ -151,9 +151,9 @@ def process_query_offline(prompt: str, boat_lat: Optional[float] = None, boat_lo
     species = detect_target_species(prompt)
     prompt_lower = prompt.lower()
 
-    is_malayalam = bool(re.search(r'[\u0D00-\u0D7F]', prompt)) or any(w in prompt_lower for w in ["മീൻ", "സ്ഥലം", "കടൽ", "കാലാവസ്ഥ"])
-    is_tamil = bool(re.search(r'[\u0B80-\u0BFF]', prompt)) or any(w in prompt_lower for w in ["மீன்", "எங்கே", "கடல்", "வானிலை"])
-    is_hindi = bool(re.search(r'[\u0900-\u097F]', prompt)) or any(w in prompt_lower for w in ["मछली", "कहाँ", "मौसम", "चक्रवात"])
+    is_malayalam = language == "ml" or bool(re.search(r'[\u0D00-\u0D7F]', prompt)) or any(w in prompt_lower for w in ["മീൻ", "സ്ഥലം", "കടൽ", "കാലാവസ്ഥ"])
+    is_tamil = language == "ta" or bool(re.search(r'[\u0B80-\u0BFF]', prompt)) or any(w in prompt_lower for w in ["மீன்", "எங்கே", "கடல்", "வானிலை"])
+    is_hindi = language == "hi" or bool(re.search(r'[\u0900-\u097F]', prompt)) or any(w in prompt_lower for w in ["मछली", "कहाँ", "मौसम", "चक्रवात"])
 
     matched_points = []
     for feat in features:
@@ -233,7 +233,7 @@ async def text_query(request: QueryRequest):
         if ai_response:
             return {"response": ai_response, "mode": "online-ai"}
 
-    response_text = process_query_offline(request.prompt, request.boat_lat, request.boat_lon)
+    response_text = process_query_offline(request.prompt, request.boat_lat, request.boat_lon, request.language)
     return {"response": response_text, "mode": "offline-voyage-pack"}
 
 @app.get("/api/nearest-pfz")
