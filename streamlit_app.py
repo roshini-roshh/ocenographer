@@ -6,6 +6,9 @@ from pathlib import Path
 import pandas as pd
 import pydeck as pdk
 import streamlit as st
+from streamlit_geolocation import streamlit_geolocation
+from zipfile import ZIP_DEFLATED, ZipFile
+from io import BytesIO
 
 BASE_DIR = Path(__file__).resolve().parent
 PFZ_FILE = BASE_DIR / "pfz_points.geojson"
@@ -96,6 +99,8 @@ TRANSLATIONS = {
         "warning": "Set your location before asking a location-based question. Follow official marine warnings.",
         "no_location": "Set a valid latitude and longitude first.",
         "route": "Proposed route (straight-line only)",
+        "gps": "Use current GPS location",
+        "voyage_pack": "Download voyage map pack",
     },
     "മലയാളം": {
         "title": "OceanAI മത്സ്യബന്ധന സഹായി",
@@ -110,6 +115,8 @@ TRANSLATIONS = {
         "warning": "സ്ഥലം സജ്ജമാക്കിയ ശേഷം മാത്രം ചോദ്യം ചോദിക്കുക. ഔദ്യോഗിക കടൽ മുന്നറിയിപ്പുകൾ പാലിക്കുക.",
         "no_location": "സാധുവായ അക്ഷാംശവും രേഖാംശവും ആദ്യം നൽകുക.",
         "route": "നിർദ്ദേശിച്ച യാത്രാമാർഗം (നേരിട്ടുള്ള രേഖ മാത്രം)",
+        "gps": "നിലവിലെ GPS സ്ഥലം ഉപയോഗിക്കുക",
+        "voyage_pack": "യാത്രാ മാപ്പ് പാക്ക് ഡൗൺലോഡ് ചെയ്യുക",
     },
     "தமிழ்": {
         "title": "OceanAI மீன்பிடி உதவியாளர்",
@@ -124,6 +131,8 @@ TRANSLATIONS = {
         "warning": "கேள்வி கேட்பதற்கு முன் இருப்பிடத்தை அமைக்கவும். அதிகாரப்பூர்வ கடல் எச்சரிக்கைகளைப் பின்பற்றவும்.",
         "no_location": "முதலில் சரியான அட்சரேகை மற்றும் தீர்க்கரேகையை உள்ளிடவும்.",
         "route": "முன்மொழியப்பட்ட பாதை (நேர்கோடு மட்டும்)",
+        "gps": "தற்போதைய GPS இருப்பிடத்தைப் பயன்படுத்து",
+        "voyage_pack": "பயண வரைபட தொகுப்பைப் பதிவிறக்கு",
     },
     "हिन्दी": {
         "title": "OceanAI मछली पकड़ने का सहायक",
@@ -138,6 +147,8 @@ TRANSLATIONS = {
         "warning": "स्थान आधारित प्रश्न पूछने से पहले अपना स्थान सेट करें। आधिकारिक समुद्री चेतावनियों का पालन करें।",
         "no_location": "पहले मान्य अक्षांश और देशांतर दर्ज करें।",
         "route": "प्रस्तावित मार्ग (केवल सीधी रेखा)",
+        "gps": "वर्तमान GPS स्थान का उपयोग करें",
+        "voyage_pack": "यात्रा मानचित्र पैक डाउनलोड करें",
     },
 }
 
@@ -165,11 +176,32 @@ with st.sidebar:
     language = st.selectbox("Language / ഭാഷ / மொழி / भाषा", list(TRANSLATIONS), key="language")
     t = TRANSLATIONS[language]
     st.header(t["location"])
+    gps_location = streamlit_geolocation()
+    if gps_location and gps_location.get("latitude") is not None and gps_location.get("longitude") is not None:
+        st.session_state.location = (
+            float(gps_location["latitude"]),
+            float(gps_location["longitude"]),
+        )
+        st.success(t["gps"])
     latitude = st.number_input(t["lat"], min_value=-90.0, max_value=90.0, value=10.2152, format="%.6f")
     longitude = st.number_input(t["lon"], min_value=-180.0, max_value=180.0, value=79.2281, format="%.6f")
     if st.button(t["set"], use_container_width=True):
         st.session_state.location = (latitude, longitude)
         st.success(f"{latitude:.4f}, {longitude:.4f}")
+    voyage_pack = BytesIO()
+    with ZipFile(voyage_pack, "w", ZIP_DEFLATED) as archive:
+        archive.writestr("pfz_points.geojson", PFZ_FILE.read_text(encoding="utf-8"))
+        archive.writestr(
+            "README.txt",
+            "OceanAI voyage pack. PFZ data is satellite-derived and does not replace official marine safety warnings.\n",
+        )
+    st.download_button(
+        label=f"📥 {t['voyage_pack']}",
+        data=voyage_pack.getvalue(),
+        file_name="oceanai-voyage-pack.zip",
+        mime="application/zip",
+        use_container_width=True,
+    )
     st.info(t["warning"])
 
 st.title(t["title"])
