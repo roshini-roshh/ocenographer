@@ -50,7 +50,14 @@ def bearing_direction(bearing):
     return directions[round(bearing / 45) % 8]
 
 
-def nearest_pfz(boat_lat, boat_lon):
+SPECIES_PROFILES = {
+    "Tuna": {"min_temp": 25.0, "max_temp": 30.0, "min_chl": 0.2, "max_chl": 1.2},
+    "Mackerel": {"min_temp": 22.0, "max_temp": 27.0, "min_chl": 1.0, "max_chl": 5.0},
+}
+
+
+def nearest_pfz(boat_lat, boat_lon, species="Tuna"):
+    profile = SPECIES_PROFILES[species]
     candidates = []
     for feature in load_pfz_features():
         coordinates = feature.get("geometry", {}).get("coordinates", [])
@@ -58,6 +65,13 @@ def nearest_pfz(boat_lat, boat_lon):
         if len(coordinates) < 2:
             continue
         latitude, longitude = float(coordinates[1]), float(coordinates[0])
+        sst = properties.get("sst")
+        chlorophyll = properties.get("chl")
+        if sst is None or chlorophyll is None:
+            continue
+        temperature_fit = max(0.0, 1 - abs(sst - ((profile["min_temp"] + profile["max_temp"]) / 2)) / 10)
+        chlorophyll_fit = max(0.0, 1 - abs(chlorophyll - ((profile["min_chl"] + profile["max_chl"]) / 2)) / 5)
+        suitability_score = round((temperature_fit * 0.6 + chlorophyll_fit * 0.4) * 100, 1)
         bearing = calculate_bearing(boat_lat, boat_lon, latitude, longitude)
         candidates.append(
             {
@@ -66,11 +80,19 @@ def nearest_pfz(boat_lat, boat_lon):
                 "distance_km": calculate_distance(boat_lat, boat_lon, latitude, longitude),
                 "bearing_degrees": round(bearing, 1),
                 "direction": bearing_direction(bearing),
-                "sst_c": properties.get("sst"),
-                "chlorophyll_mg_m3": properties.get("chl"),
+                "sst_c": sst,
+                "chlorophyll_mg_m3": chlorophyll,
+                "species": species,
+                "suitability_score": suitability_score,
+                "source": "pfz_points.geojson satellite PFZ dataset",
+                "within_species_range": (
+                    profile["min_temp"] <= sst <= profile["max_temp"]
+                    and profile["min_chl"] <= chlorophyll <= profile["max_chl"]
+                ),
             }
         )
-    return min(candidates, key=lambda item: item["distance_km"]) if candidates else None
+    suitable = [item for item in candidates if item["within_species_range"]]
+    return min(suitable or candidates, key=lambda item: item["distance_km"]) if candidates else None
 
 
 def offline_answer(question, location, pfz):
@@ -92,13 +114,26 @@ def localized_answer(language, pfz):
         f"{pfz['distance_km']:.1f}",
         str(pfz["sst_c"]),
         str(pfz["chlorophyll_mg_m3"]),
+        pfz["species"],
+        str(pfz["suitability_score"]),
     )
     answers = {
+        "English": (
+            f"Nearest {values[4]}-suitable PFZ: **{values[0]}**\n\n"
+            f"Distance: **{values[1]} km**\n\n"
+            f"Direction: **{pfz['direction']} ({pfz['bearing_degrees']}°)**\n\n"
+            f"Sea-surface temperature: **{values[2]}°C**\n\n"
+            f"Chlorophyll: **{values[3]} mg/m³**\n\n"
+            f"{values[4]} suitability score: **{values[5]}%**\n\n"
+            "This is a satellite-derived PFZ indication, not a guarantee of fish availability. "
+            "Live weather, tide, cyclone, lightning, and geofencing feeds are not configured."
+        ),
         "മലയാളം": (
             f"നിങ്ങളുടെ സ്ഥലത്തിന് ഏറ്റവും അടുത്തുള്ള PFZ: **{values[0]}**\n\n"
             f"ദൂരം: **{values[1]} കിലോമീറ്റർ**\n\n"
             f"കടൽ ഉപരിതല താപനില: **{values[2]}°C**\n\n"
             f"ക്ലോറോഫിൽ: **{values[3]} mg/m³**\n\n"
+            f"{values[4]} അനുയോജ്യതാ സ്കോർ: **{values[5]}%**\n\n"
             "തത്സമയ കാലാവസ്ഥ, വേലിയേറ്റം, ചുഴലിക്കാറ്റ്, മിന്നൽ, ജിയോഫെൻസിംഗ് വിവരങ്ങൾ ലഭ്യമല്ല. "
             "യാത്രയ്ക്ക് മുമ്പ് ഔദ്യോഗിക കടൽ മുന്നറിയിപ്പുകൾ പരിശോധിക്കുക."
         ),
@@ -107,6 +142,7 @@ def localized_answer(language, pfz):
             f"தூரம்: **{values[1]} கி.மீ.**\n\n"
             f"கடல் மேற்பரப்பு வெப்பநிலை: **{values[2]}°C**\n\n"
             f"குளோரோபில்: **{values[3]} mg/m³**\n\n"
+            f"{values[4]} பொருத்தமான நிலை மதிப்பெண்: **{values[5]}%**\n\n"
             "நேரடி வானிலை, அலை, சூறாவளி, மின்னல் மற்றும் கட்டுப்பாட்டு தகவல்கள் இல்லை. "
             "பயணத்திற்கு முன் அதிகாரப்பூர்வ கடல் எச்சரிக்கைகளைச் சரிபார்க்கவும்."
         ),
@@ -115,6 +151,7 @@ def localized_answer(language, pfz):
             f"दूरी: **{values[1]} किमी**\n\n"
             f"समुद्री सतह का तापमान: **{values[2]}°C**\n\n"
             f"क्लोरोफिल: **{values[3]} mg/m³**\n\n"
+            f"{values[4]} उपयुक्तता स्कोर: **{values[5]}%**\n\n"
             "लाइव मौसम, ज्वार, चक्रवात, बिजली और प्रतिबंधित क्षेत्र की जानकारी उपलब्ध नहीं है। "
             "यात्रा से पहले आधिकारिक समुद्री चेतावनियां जांचें।"
         ),
@@ -140,6 +177,7 @@ TRANSLATIONS = {
         "map": "PFZ map",
         "chat": "OceanAI Chat",
         "caption": "Satellite-derived PFZ indications are not a guarantee of fish availability.",
+        "species": "Target fish",
         "questions": [],
     },
     "മലയാളം": {
@@ -160,7 +198,8 @@ TRANSLATIONS = {
         "map": "PFZ മാപ്പ്",
         "chat": "OceanAI ചാറ്റ്",
         "caption": "സാറ്റലൈറ്റ് വിവരങ്ങളിൽ നിന്നുള്ള PFZ സൂചനകൾ മത്സ്യം ലഭിക്കുമെന്ന ഉറപ്പല്ല.",
-        "questions": ["ഇന്നത്തെ ഏറ്റവും അടുത്തുള്ള സാധ്യതയുള്ള മത്സ്യബന്ധന മേഖല (PFZ) ഏതാണ്?", "നാളെ രാവിലെ കടലിൽ പോകുന്നത് സുരക്ഷിതമാണോ?", "എന്റെ മത്സ്യബന്ധന സ്ഥലത്തെ വേലിയേറ്റം, കാലാവസ്ഥ, കടൽസ്ഥിതി എന്താണ്?", "എന്റെ പ്രദേശത്ത് മിന്നൽ അല്ലെങ്കിൽ ചുഴലിക്കാറ്റ് മുന്നറിയിപ്പുണ്ടോ?", "ഉയർന്ന ക്ലോറോഫിൽ സാന്ദ്രതയും അനുയോജ്യമായ കടൽ ഉപരിതല താപനിലയുമുള്ള മേഖലകൾ ഏവ?", "മത്സ്യബന്ധന ബോട്ടിന് ഏറ്റവും സുരക്ഷിതമായ യാത്രാമാർഗം ഏതാണ്?", "ഈ തീരപ്രദേശത്ത് മത്സ്യ ഉൽപ്പാദനം കുറഞ്ഞത് എന്തുകൊണ്ട്?", "അപകടകരമോ നിയന്ത്രിതമോ ആയതിനാൽ ഒഴിവാക്കേണ്ട മത്സ്യബന്ധന മേഖലകൾ ഏവ?"],
+        "species": "ലക്ഷ്യമിടുന്ന മത്സ്യം",
+        "questions": ["ഇന്നത്തെ ഏറ്റവും അടുത്തുള്ള ട്യൂണ PFZ ഏതാണ്?", "ഇന്നത്തെ ഏറ്റവും അടുത്തുള്ള മാക്കറൽ PFZ ഏതാണ്?", "നാളെ രാവിലെ കടലിൽ പോകുന്നത് സുരക്ഷിതമാണോ?", "എന്റെ മത്സ്യബന്ധന സ്ഥലത്തെ വേലിയേറ്റം, കാലാവസ്ഥ, കടൽസ്ഥിതി എന്താണ്?", "എന്റെ പ്രദേശത്ത് മിന്നൽ അല്ലെങ്കിൽ ചുഴലിക്കാറ്റ് മുന്നറിയിപ്പുണ്ടോ?", "ഉയർന്ന ക്ലോറോഫിൽ സാന്ദ്രതയും അനുയോജ്യമായ കടൽ ഉപരിതല താപനിലയുമുള്ള മേഖലകൾ ഏവ?", "മത്സ്യബന്ധന ബോട്ടിന് ഏറ്റവും സുരക്ഷിതമായ യാത്രാമാർഗം ഏതാണ്?", "അപകടകരമോ നിയന്ത്രിതമോ ആയതിനാൽ ഒഴിവാക്കേണ്ട മത്സ്യബന്ധന മേഖലകൾ ഏവ?"],
     },
     "தமிழ்": {
         "title": "OceanAI மீன்பிடி உதவியாளர்",
@@ -180,7 +219,8 @@ TRANSLATIONS = {
         "map": "PFZ வரைபடம்",
         "chat": "OceanAI அரட்டை",
         "caption": "செயற்கைக்கோள் PFZ தகவல் மீன் கிடைப்பதற்கான உத்தரவாதம் அல்ல.",
-        "questions": ["இன்றைய அருகிலுள்ள சாத்தியமான மீன்பிடி மண்டலம் (PFZ) எது?", "நாளை காலை கடலுக்குச் செல்வது பாதுகாப்பானதா?", "எனது மீன்பிடி இடத்திற்கு அருகிலுள்ள அலை, வானிலை மற்றும் கடல் நிலை என்ன?", "எனது பகுதியில் மின்னல் அல்லது சூறாவளி எச்சரிக்கைகள் உள்ளனவா?", "அதிக குளோரோபில் மற்றும் சாதகமான கடல் மேற்பரப்பு வெப்பநிலை உள்ள பகுதிகள் எவை?", "மீன்பிடி படகிற்கு பாதுகாப்பான பாதை எது?", "இந்தக் கடலோரப் பகுதியில் மீன் உற்பத்தி ஏன் குறைந்தது?", "ஆபத்து அல்லது கட்டுப்பாடுகள் காரணமாக தவிர்க்க வேண்டிய மீன்பிடி மண்டலங்கள் எவை?"],
+        "species": "இலக்கு மீன்",
+        "questions": ["இன்றைய அருகிலுள்ள டூனா PFZ எது?", "இன்றைய அருகிலுள்ள கானாங்கெளுத்தி PFZ எது?", "நாளை காலை கடலுக்குச் செல்வது பாதுகாப்பானதா?", "எனது மீன்பிடி இடத்திற்கு அருகிலுள்ள அலை, வானிலை மற்றும் கடல் நிலை என்ன?", "எனது பகுதியில் மின்னல் அல்லது சூறாவளி எச்சரிக்கைகள் உள்ளனவா?", "அதிக குளோரோபில் மற்றும் சாதகமான கடல் மேற்பரப்பு வெப்பநிலை உள்ள பகுதிகள் எவை?", "மீன்பிடி படகிற்கு பாதுகாப்பான பாதை எது?", "ஆபத்து அல்லது கட்டுப்பாடுகள் காரணமாக தவிர்க்க வேண்டிய மீன்பிடி மண்டலங்கள் எவை?"],
     },
     "हिन्दी": {
         "title": "OceanAI मछली पकड़ने का सहायक",
@@ -200,12 +240,14 @@ TRANSLATIONS = {
         "map": "PFZ मानचित्र",
         "chat": "OceanAI चैट",
         "caption": "उपग्रह से प्राप्त PFZ संकेत मछली मिलने की गारंटी नहीं हैं।",
-        "questions": ["आज का सबसे नज़दीकी संभावित मछली पकड़ने का क्षेत्र (PFZ) कहाँ है?", "क्या कल सुबह समुद्र में जाना सुरक्षित है?", "मेरे मछली पकड़ने के स्थान के पास ज्वार, मौसम और समुद्र की स्थिति कैसी है?", "क्या मेरे क्षेत्र में बिजली या चक्रवात की चेतावनी है?", "कौन से क्षेत्रों में अधिक क्लोरोफिल और अनुकूल समुद्री सतह का तापमान है?", "मछली पकड़ने वाली नाव के लिए सबसे सुरक्षित मार्ग कौन सा है?", "इस तटीय क्षेत्र में मछली उत्पादकता क्यों कम हुई?", "खतरनाक या प्रतिबंधित होने के कारण किन मछली पकड़ने वाले क्षेत्रों से बचना चाहिए?"],
+        "species": "लक्षित मछली",
+        "questions": ["आज का सबसे नज़दीकी टूना PFZ कहाँ है?", "आज का सबसे नज़दीकी मैकेरल PFZ कहाँ है?", "क्या कल सुबह समुद्र में जाना सुरक्षित है?", "मेरे मछली पकड़ने के स्थान के पास ज्वार, मौसम और समुद्र की स्थिति कैसी है?", "क्या मेरे क्षेत्र में बिजली या चक्रवात की चेतावनी है?", "कौन से क्षेत्रों में अधिक क्लोरोफिल और अनुकूल समुद्री सतह का तापमान है?", "मछली पकड़ने वाली नाव के लिए सबसे सुरक्षित मार्ग कौन सा है?", "खतरनाक या प्रतिबंधित होने के कारण किन मछली पकड़ने वाले क्षेत्रों से बचना चाहिए?"],
     },
 }
 
 QUESTIONS = [
-    "Where is the nearest Potential Fishing Zone (PFZ) today?",
+    "Where is the nearest tuna PFZ today?",
+    "Where is the nearest mackerel PFZ today?",
     "Is it safe to venture into the sea tomorrow morning?",
     "What are the tide, weather, and sea conditions near my fishing location?",
     "Are there any lightning or cyclone alerts in my area?",
@@ -224,11 +266,14 @@ if "location" not in st.session_state:
     st.session_state.location = None
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "species" not in st.session_state:
+    st.session_state.species = "Tuna"
 
 with st.sidebar:
     language = st.selectbox("Language / ഭാഷ / மொழி / भाषा", list(TRANSLATIONS), key="language")
     t = TRANSLATIONS[language]
     st.header(t["location"])
+    species = st.selectbox(t["species"], list(SPECIES_PROFILES), key="species")
     gps_location = streamlit_geolocation()
     if gps_location and gps_location.get("latitude") is not None and gps_location.get("longitude") is not None:
         st.session_state.location = (
@@ -262,7 +307,7 @@ st.caption(t["caption"])
 
 features = load_pfz_features()
 location = st.session_state.location
-pfz = nearest_pfz(*location) if location else None
+pfz = nearest_pfz(*location, species) if location else None
 
 left, right = st.columns([1, 1])
 with left:
@@ -280,6 +325,8 @@ with left:
         st.write(f"**Direction:** {pfz['direction']} ({pfz['bearing_degrees']}°)")
         st.write(f"**SST:** {pfz['sst_c']} °C")
         st.write(f"**Chlorophyll:** {pfz['chlorophyll_mg_m3']} mg/m³")
+        st.write(f"**{pfz['species']} suitability:** {pfz['suitability_score']}%")
+        st.caption(f"Source: {pfz['source']}")
         st.warning("Live weather, tide, cyclone, lightning, and geofencing feeds are not configured. Do not treat this as a safety clearance.")
     elif not location:
         st.info(t["no_location"])
