@@ -1,14 +1,67 @@
 import os
+import json
+import math
 from pathlib import Path
 
 import pandas as pd
 import pydeck as pdk
 import streamlit as st
 
-from main import load_pfz_features, nearest_pfz, process_query_offline
-
-
 BASE_DIR = Path(__file__).resolve().parent
+PFZ_FILE = BASE_DIR / "pfz_points.geojson"
+
+
+def load_pfz_features():
+    if not PFZ_FILE.exists():
+        return []
+    with PFZ_FILE.open("r", encoding="utf-8") as file:
+        return json.load(file).get("features", [])
+
+
+def calculate_distance(lat1, lon1, lat2, lon2):
+    radius_km = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    value = (
+        math.sin(dlat / 2) ** 2
+        + math.cos(math.radians(lat1))
+        * math.cos(math.radians(lat2))
+        * math.sin(dlon / 2) ** 2
+    )
+    return radius_km * 2 * math.atan2(math.sqrt(value), math.sqrt(1 - value))
+
+
+def nearest_pfz(boat_lat, boat_lon):
+    candidates = []
+    for feature in load_pfz_features():
+        coordinates = feature.get("geometry", {}).get("coordinates", [])
+        properties = feature.get("properties", {})
+        if len(coordinates) < 2:
+            continue
+        latitude, longitude = float(coordinates[1]), float(coordinates[0])
+        candidates.append(
+            {
+                "latitude": latitude,
+                "longitude": longitude,
+                "distance_km": calculate_distance(boat_lat, boat_lon, latitude, longitude),
+                "sst_c": properties.get("sst"),
+                "chlorophyll_mg_m3": properties.get("chl"),
+            }
+        )
+    return min(candidates, key=lambda item: item["distance_km"]) if candidates else None
+
+
+def offline_answer(question, location, pfz):
+    if not pfz:
+        return "No PFZ dataset is currently available."
+    return (
+        f"Nearest PFZ for your location is at "
+        f"({pfz['latitude']:.4f}, {pfz['longitude']:.4f}), "
+        f"{pfz['distance_km']:.1f} km away. "
+        f"SST: {pfz['sst_c']} °C; chlorophyll: {pfz['chlorophyll_mg_m3']} mg/m³.\n\n"
+        "Live weather, tide, cyclone, lightning, and geofencing feeds are not configured. "
+        "Do not treat this result as a safety clearance; follow official marine warnings."
+    )
 
 TRANSLATIONS = {
     "English": {
@@ -182,7 +235,7 @@ if st.button(t["ask"], type="primary"):
     elif not question:
         st.error("Choose or enter a question.")
     else:
-        answer = process_query_offline(question, location[0], location[1])
+        answer = offline_answer(question, location, pfz)
         st.session_state.messages.append(("You", question))
         st.session_state.messages.append(("AI", answer))
 
