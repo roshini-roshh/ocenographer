@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ocean AI - Potential Fishing Zone Dashboard</title>
+
+    <link rel="stylesheet" href="leaflet.css" />
+    <link rel="stylesheet" href="MarkerCluster.css" />
+    <link rel="stylesheet" href="MarkerCluster.Default.css" />
+
+    <style>
+        body { margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        #map { height: 100vh; width: 100vw; background-color: #0a192f; }
+        
+        .info-card {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 18px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            width: 340px;
+            box-sizing: border-box;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .info-card h3 { margin: 0 0 10px 0; color: #0A2540; font-size: 18px; }
+
+        .boat-btn {
+            width: 100%;
+            padding: 10px 12px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 13px;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+            margin-bottom: 8px;
+        }
+        .boat-btn:hover { background: #218838; }
+
+        .download-btn {
+            width: 100%;
+            padding: 9px 12px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 12px;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+            margin-bottom: 12px;
+        }
+        .download-btn:hover { background: #0056b3; }
+
+        .status-box {
+            font-size: 11px;
+            color: #333;
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 8px 10px;
+            margin-bottom: 12px;
+            line-height: 1.4;
+        }
+        .location-form { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px; }
+        .location-form input { width: 100%; box-sizing: border-box; padding: 7px; border: 1px solid #ccc; border-radius: 4px; font-size: 11px; }
+        .location-form button { grid-column: 1 / -1; padding: 7px; border: 0; border-radius: 5px; background: #495057; color: white; cursor: pointer; font-size: 11px; }
+        .safety-warning { color: #8a1c1c; background: #fff3cd; border: 1px solid #ffeeba; border-radius: 4px; padding: 7px; font-size: 11px; margin-bottom: 8px; }
+
+        .section-label {
+            font-size: 11px;
+            font-weight: bold;
+            color: #555;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .language-select, .query-select {
+            width: 100%;
+            padding: 8px;
+            font-size: 11px;
+            background: #fff;
+            color: #333;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-bottom: 8px;
+        }
+        .language-continue {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 12px;
+            border: 0;
+            border-radius: 6px;
+            background: #007bff;
+            color: #fff;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .language-continue:hover { background: #0056b3; }
+
+        .chat-container { border-top: 1px solid #e9ecef; padding-top: 10px; }
+        #chat-messages {
+            height: 110px;
+            overflow-y: auto;
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 6px;
+            font-size: 11px;
+            margin-bottom: 6px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="info-card">
+        <h3 id="app-title">Ocean Analytics</h3>
+        
+        <button id="gps-button" class="boat-btn" onclick="locateBoat()">⚓ Locate My Boat GPS</button>
+        <div class="location-form">
+            <input type="number" id="manual-lat" placeholder="Latitude (e.g. 10.2)" step="any" min="-90" max="90">
+            <input type="number" id="manual-lon" placeholder="Longitude (e.g. 79.2)" step="any" min="-180" max="180">
+            <button id="manual-button" onclick="setManualLocation()">Set manual location</button>
+        </div>
+        <div id="safety-warning" class="safety-warning">Set GPS, enter coordinates, or click the map before asking a location-based question. Always follow official marine warnings.</div>
+        <button id="download-button" class="download-btn" onclick="autoDownloadVoyageArea()">📥 Download Voyage Map Pack</button>
+
+        <div id="status-box" class="status-box">
+            GPS status: <em>Click above to find your position.</em>
+        </div>
+
+        <div class="section-label" id="language-label">Enter your preferred language</div>
+        <select id="language-select" class="language-select">
+            <option value="en">English</option>
+            <option value="ml">മലയാളം</option>
+            <option value="ta">தமிழ்</option>
+            <option value="hi">हिन्दी</option>
+        </select>
+        <button id="language-continue" class="language-continue" onclick="proceedWithLanguage()">Continue in this language</button>
+
+        <div class="chat-container">
+            <div class="section-label" id="chat-label">Ocean AI Multilingual Chat</div>
+            <select id="query-select" class="query-select" onchange="useSuggestedQuery(this.value)">
+                <option value="">Choose a question</option>
+            </select>
+            <div id="chat-messages">
+                <div><strong>AI:</strong> Ask about weather, safety, tides, or routes.</div>
+            </div>
+            <div style="display: flex; gap: 6px;">
+                <input type="text" id="chat-input" placeholder="Ask anything (weather, routes...)" style="flex: 1; padding: 6px; font-size: 11px; border: 1px solid #ccc; border-radius: 4px;" onkeypress="if(event.key === 'Enter') sendChatMessage()" />
+                <button id="send-button" onclick="sendChatMessage()" style="padding: 6px 10px; background: #007bff; color: white; border: none; border-radius: 4px; font-size: 11px; cursor: pointer;">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <script src="leaflet.js"></script>
+    <script src="leaflet.markercluster.js"></script>
+    
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js?v=2').then(() => {
+                    console.log("Voyage Offline Cache active.");
+                });
+            });
+        }
+
+        let boatLat = null;
+        let boatLon = null;
+        let boatMarker = null;
+        let routeLine = null;
+        let geoJsonFeatures = [];
+        let selectedLanguage = "en";
+
+        const translations = {
+            en: {
+                title: "Ocean Analytics", gps: "⚓ Locate My Boat GPS", manual: "Set manual location",
+                warning: "Set GPS, enter coordinates, or click the map before asking a location-based question. Always follow official marine warnings.",
+                download: "📥 Download Voyage Map Pack", language: "Enter your preferred language", continue: "Continue in this language", chat: "Ocean AI Chat",
+                choose: "Choose a question", placeholder: "Ask anything (weather, routes...)", send: "Send",
+                intro: "Ask about weather, safety, tides, or routes.",
+                queries: ["Where is the nearest Potential Fishing Zone (PFZ) today?", "Is it safe to venture into the sea tomorrow morning?", "What are the tide, weather, and sea conditions near my fishing location?", "Are there any lightning or cyclone alerts in my area?", "Which regions show high chlorophyll concentration and favourable sea surface temperature?", "What is the safest route for a fishing vessel?", "Why has fish productivity declined in this coastal region?", "Which fishing zones should be avoided due to hazards or restrictions?"]
+            },
+            ml: {
+                title: "സമുദ്ര വിശകലനം", gps: "⚓ എന്റെ ബോട്ടിന്റെ GPS കണ്ടെത്തുക", manual: "സ്ഥലം സജ്ജമാക്കുക",
+                warning: "സ്ഥലം അടിസ്ഥാനമാക്കിയുള്ള ചോദ്യം ചോദിക്കുന്നതിന് മുമ്പ് GPS ഉപയോഗിക്കുക, കോർഡിനേറ്റുകൾ നൽകുക, അല്ലെങ്കിൽ മാപ്പിൽ ക്ലിക്ക് ചെയ്യുക. ഔദ്യോഗിക കടൽ മുന്നറിയിപ്പുകൾ പാലിക്കുക.",
+                download: "📥 യാത്രാ മാപ്പ് പാക്ക് ഡൗൺലോഡ് ചെയ്യുക", language: "നിങ്ങളുടെ ഇഷ്ട ഭാഷ നൽകുക", continue: "ഈ ഭാഷയിൽ തുടരുക", chat: "Ocean AI ചാറ്റ്",
+                choose: "ഒരു ചോദ്യം തിരഞ്ഞെടുക്കുക", placeholder: "കാലാവസ്ഥ, യാത്രാമാർഗം എന്നിവ ചോദിക്കുക...", send: "അയയ്ക്കുക",
+                intro: "കാലാവസ്ഥ, സുരക്ഷ, തിരമാല, വേലിയേറ്റം അല്ലെങ്കിൽ യാത്രാമാർഗം ചോദിക്കുക.",
+                queries: ["ഇന്നത്തെ ഏറ്റവും അടുത്തുള്ള സാധ്യതയുള്ള മത്സ്യബന്ധന മേഖല (PFZ) ഏതാണ്?", "നാളെ രാവിലെ കടലിൽ പോകുന്നത് സുരക്ഷിതമാണോ?", "എന്റെ മത്സ്യബന്ധന സ്ഥലത്തെ വേലിയേറ്റം, കാലാവസ്ഥ, കടൽസ്ഥിതി എന്താണ്?", "എന്റെ പ്രദേശത്ത് മിന്നൽ അല്ലെങ്കിൽ ചുഴലിക്കാറ്റ് മുന്നറിയിപ്പുണ്ടോ?", "ഉയർന്ന ക്ലോറോഫിൽ സാന്ദ്രതയും അനുയോജ്യമായ കടൽ ഉപരിതല താപനിലയുമുള്ള മേഖലകൾ ഏവ?", "മത്സ്യബന്ധന ബോട്ടിന് ഏറ്റവും സുരക്ഷിതമായ യാത്രാമാർഗം ഏതാണ്?", "ഈ തീരപ്രദേശത്ത് മത്സ്യ ഉൽപ്പാദനം കുറഞ്ഞത് എന്തുകൊണ്ട്?", "അപകടകരമോ നിയന്ത്രിതമോ ആയതിനാൽ ഒഴിവാക്കേണ്ട മത്സ്യബന്ധന മേഖലകൾ ഏവ?"]
+            },
+            ta: {
+                title: "கடல் பகுப்பாய்வு", gps: "⚓ எனது படகு GPS-ஐ கண்டறி", manual: "கைமுறை இருப்பிடத்தை அமை",
+                warning: "இருப்பிடம் சார்ந்த கேள்வி கேட்பதற்கு முன் GPS பயன்படுத்தவும், ஆயத்தொலைவுகளை உள்ளிடவும் அல்லது வரைபடத்தில் கிளிக் செய்யவும். அதிகாரப்பூர்வ கடல் எச்சரிக்கைகளைப் பின்பற்றவும்.",
+                download: "📥 பயண வரைபட தொகுப்பைப் பதிவிறக்கு", language: "உங்களுக்கு விருப்பமான மொழியைத் தேர்ந்தெடுக்கவும்", continue: "இந்த மொழியில் தொடரவும்", chat: "Ocean AI அரட்டை",
+                choose: "ஒரு கேள்வியைத் தேர்ந்தெடுக்கவும்", placeholder: "வானிலை, பாதைகள் பற்றி கேளுங்கள்...", send: "அனுப்பு",
+                intro: "வானிலை, பாதுகாப்பு, அலைகள் அல்லது பாதைகள் பற்றி கேளுங்கள்.",
+                queries: ["இன்றைய அருகிலுள்ள சாத்தியமான மீன்பிடி மண்டலம் (PFZ) எது?", "நாளை காலை கடலுக்குச் செல்வது பாதுகாப்பானதா?", "எனது மீன்பிடி இடத்திற்கு அருகிலுள்ள அலை, வானிலை மற்றும் கடல் நிலை என்ன?", "எனது பகுதியில் மின்னல் அல்லது சூறாவளி எச்சரிக்கைகள் உள்ளனவா?", "அதிக குளோரோபில் மற்றும் சாதகமான கடல் மேற்பரப்பு வெப்பநிலை உள்ள பகுதிகள் எவை?", "மீன்பிடி படகிற்கு பாதுகாப்பான பாதை எது?", "இந்தக் கடலோரப் பகுதியில் மீன் உற்பத்தி ஏன் குறைந்தது?", "ஆபத்து அல்லது கட்டுப்பாடுகள் காரணமாக தவிர்க்க வேண்டிய மீன்பிடி மண்டலங்கள் எவை?"]
+            },
+            hi: {
+                title: "महासागर विश्लेषण", gps: "⚓ मेरी नाव का GPS खोजें", manual: "मैन्युअल स्थान सेट करें",
+                warning: "स्थान आधारित प्रश्न पूछने से पहले GPS सेट करें, निर्देशांक दर्ज करें या मानचित्र पर क्लिक करें। आधिकारिक समुद्री चेतावनियों का पालन करें।",
+                download: "📥 यात्रा मानचित्र पैक डाउनलोड करें", language: "अपनी पसंदीदा भाषा दर्ज करें", continue: "इस भाषा में आगे बढ़ें", chat: "Ocean AI चैट",
+                choose: "एक प्रश्न चुनें", placeholder: "मौसम, मार्ग आदि के बारे में पूछें...", send: "भेजें",
+                intro: "मौसम, सुरक्षा, ज्वार या मार्गों के बारे में पूछें।",
+                queries: ["आज का सबसे नज़दीकी संभावित मछली पकड़ने का क्षेत्र (PFZ) कहाँ है?", "क्या कल सुबह समुद्र में जाना सुरक्षित है?", "मेरे मछली पकड़ने के स्थान के पास ज्वार, मौसम और समुद्र की स्थिति कैसी है?", "क्या मेरे क्षेत्र में बिजली या चक्रवात की चेतावनी है?", "कौन से क्षेत्रों में अधिक क्लोरोफिल और अनुकूल समुद्री सतह का तापमान है?", "मछली पकड़ने वाली नाव के लिए सबसे सुरक्षित मार्ग कौन सा है?", "इस तटीय क्षेत्र में मछली उत्पादकता क्यों कम हुई?", "खतरनाक या प्रतिबंधित होने के कारण किन मछली पकड़ने वाले क्षेत्रों से बचना चाहिए?"]
+            }
+        };
+
+        function useSuggestedQuery(query) {
+            if (query) document.getElementById("chat-input").value = query;
+        }
+
+        function proceedWithLanguage() {
+            applyLanguage(document.getElementById("language-select").value);
+            setStatus("<b>Language selected.</b> You can now continue with the map and chat in your preferred language.");
+        }
+
+        function applyLanguage(language) {
+            selectedLanguage = translations[language] ? language : "en";
+            const text = translations[selectedLanguage];
+            document.documentElement.lang = selectedLanguage;
+            document.getElementById("app-title").textContent = text.title;
+            document.getElementById("gps-button").textContent = text.gps;
+            document.getElementById("manual-button").textContent = text.manual;
+            document.getElementById("safety-warning").textContent = text.warning;
+            document.getElementById("download-button").textContent = text.download;
+            document.getElementById("language-label").textContent = text.language;
+            document.getElementById("language-continue").textContent = text.continue;
+            document.getElementById("chat-label").textContent = text.chat;
+            document.getElementById("chat-input").placeholder = text.placeholder;
+            document.getElementById("send-button").textContent = text.send;
+            const querySelect = document.getElementById("query-select");
+            querySelect.innerHTML = `<option value="">${text.choose}</option>`;
+            text.queries.forEach(query => {
+                const option = document.createElement("option");
+                option.value = query;
+                option.textContent = query;
+                querySelect.appendChild(option);
+            });
+            document.getElementById("chat-messages").innerHTML = `<div><strong>AI:</strong> ${text.intro}</div>`;
+        }
+
+        function setStatus(htmlContent) {
+            document.getElementById("status-box").innerHTML = htmlContent;
+        }
+
+        function locateBoat() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => { 
+                        boatLat = pos.coords.latitude; 
+                        boatLon = pos.coords.longitude; 
+                        updateBoatOnMap(boatLat, boatLon); 
+                    },
+                    () => setStatus("<b>GPS permission denied.</b> Enter latitude and longitude manually or click your location on the map.")
+                );
+            } else {
+                setStatus("<b>GPS is not available.</b> Enter latitude and longitude manually or click your location on the map.");
+            }
+        }
+
+        function setManualLocation() {
+            const lat = Number(document.getElementById("manual-lat").value);
+            const lon = Number(document.getElementById("manual-lon").value);
+            if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+                setStatus("<b>Invalid location.</b> Latitude must be -90 to 90 and longitude must be -180 to 180.");
+                return;
+            }
+            boatLat = lat;
+            boatLon = lon;
+            updateBoatOnMap(lat, lon, "Manual location");
+        }
+
+        function updateBoatOnMap(lat, lon, source = "GPS location") {
+            if (boatMarker) window.map.removeLayer(boatMarker);
+            boatMarker = L.marker([lat, lon], {
+                icon: L.divIcon({
+                    className: 'custom-pin',
+                    html: `<div style="background-color:#FF3333; width:16px; height:16px; border-radius:50%; border:2px solid white; box-shadow:0 0 12px #FF3333;"></div>`,
+                    iconSize: [16, 16], iconAnchor: [8, 8]
+                })
+            }).addTo(window.map).bindPopup(`<b>⚓ Your Boat Location</b><br>${lat.toFixed(4)}°N, ${lon.toFixed(4)}°E`).openPopup();
+
+            window.map.flyTo([lat, lon], 9);
+            setStatus(`<b>⚓ ${source} set:</b><br/>Latitude: ${lat.toFixed(4)}<br/>Longitude: ${lon.toFixed(4)}<br/><em>Location is ready for PFZ queries.</em>`);
+        }
+
+        async function autoDownloadVoyageArea() {
+            if (boatLat === null || boatLon === null) {
+                setStatus("<b>Location required.</b> Set your location before downloading a voyage area.");
+                return;
+            }
+            setStatus("<b>[PORT MODE] Auto-downloading map tiles for voyage...</b>");
+            
+            const z = 8;
+            const centerTileX = Math.floor((boatLon + 180) / 360 * Math.pow(2, z));
+            const centerTileY = Math.floor((1 - Math.log(Math.tan(boatLat * Math.PI / 180) + 1 / Math.cos(boatLat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, z));
+            
+            let fetched = 0;
+            for (let x = centerTileX - 2; x <= centerTileX + 2; x++) {
+                for (let y = centerTileY - 2; y <= centerTileY + 2; y++) {
+                    const tileUrl = `https://a.tile.openstreetmap.org/${z}/${x}/${y}.png`;
+                    fetch(tileUrl).catch(() => {});
+                    fetched++;
+                }
+            }
+            setStatus(`<b>✅ ${fetched} Map tiles saved locally! Ready for offshore voyage.</b>`);
+        }
+
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+        }
+
+        function filterNearest(speciesType, lang) {
+            if (boatLat === null || boatLon === null) {
+                setStatus("<b>Location required.</b> Set GPS, enter coordinates, or click the map first.");
+                return;
+            }
+            if (!geoJsonFeatures || geoJsonFeatures.length === 0) {
+                setStatus("<em>Loading PFZ points data...</em>");
+                return;
+            }
+
+            let closestPt = null;
+            let minDistance = Infinity;
+
+            geoJsonFeatures.forEach(feat => {
+                const coords = feat.geometry.coordinates;
+                const dist = calculateDistance(boatLat, boatLon, coords[1], coords[0]);
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    closestPt = { lat: coords[1], lon: coords[0], sst: feat.properties.sst, chl: feat.properties.chl, dist: dist };
+                }
+            });
+
+            if (closestPt) {
+                if (routeLine) window.map.removeLayer(routeLine);
+                routeLine = L.polyline([[boatLat, boatLon], [closestPt.lat, closestPt.lon]], {
+                    color: "#ffb000", weight: 3, dashArray: "8 8"
+                }).addTo(window.map);
+                window.map.flyTo([closestPt.lat, closestPt.lon], 9, { animate: true, duration: 1.5 });
+                setTimeout(() => {
+                    L.popup()
+                        .setLatLng([closestPt.lat, closestPt.lon])
+                        .setContent(`<b>🌟 Target Hotspot (${lang})</b><br>GPS: ${closestPt.lat.toFixed(4)}°N, ${closestPt.lon.toFixed(4)}°E<br>Distance: <b>${closestPt.dist.toFixed(1)} km</b>`)
+                        .openOn(window.map);
+                }, 1600);
+                setStatus(`<b>Closest Hotspot (${lang}):</b><br/>Distance: <b>${closestPt.dist.toFixed(1)} km</b><br/>SST: ${closestPt.sst}°C | Chlorophyll: ${closestPt.chl} mg/m³`);
+            }
+        }
+
+        async function sendChatMessage() {
+            const inputField = document.getElementById("chat-input");
+            const msgContainer = document.getElementById("chat-messages");
+            const prompt = inputField.value.trim();
+            if (!prompt) return;
+
+            if (boatLat === null || boatLon === null) {
+                msgContainer.innerHTML += `<div style="color:#8a1c1c;"><strong>AI:</strong> Please set your location with GPS, manual coordinates, or map selection before asking this question.</div>`;
+                return;
+            }
+
+            msgContainer.innerHTML += `<div><strong>You:</strong> ${prompt}</div>`;
+            inputField.value = "";
+            msgContainer.scrollTop = msgContainer.scrollHeight;
+
+            try {
+                const res = await fetch('http://127.0.0.1:8000/api/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt, boat_lat: boatLat, boat_lon: boatLon, language: selectedLanguage })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || "Request failed");
+                msgContainer.innerHTML += `<div><strong>AI (${data.mode}):</strong> ${data.response.replace(/\n/g, '<br/>')}</div>`;
+            } catch (err) {
+                msgContainer.innerHTML += `<div style="color:red;"><strong>Error:</strong> ${err.message || "Backend unreachable."}</div>`;
+            }
+            msgContainer.scrollTop = msgContainer.scrollHeight;
+        }
+
+        const map = L.map('map', { center: [10.2, 79.2], zoom: 7, maxZoom: 13, minZoom: 4 });
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+        window.map = map;
+        map.on("click", (event) => {
+            boatLat = event.latlng.lat;
+            boatLon = event.latlng.lng;
+            document.getElementById("manual-lat").value = boatLat.toFixed(6);
+            document.getElementById("manual-lon").value = boatLon.toFixed(6);
+            updateBoatOnMap(boatLat, boatLon, "Map-selected location");
+        });
+
+        const pfzIcon = L.divIcon({
+            className: 'custom-pin',
+            html: `<div style="background-color:#00E5FF; width:12px; height:12px; border-radius:50%; border:2px solid white; box-shadow:0 0 10px #00E5FF;"></div>`,
+            iconSize: [12, 12], iconAnchor: [6, 6]
+        });
+
+        const markers = L.markerClusterGroup({ disableClusteringAtZoom: 9 });
+        fetch('pfz_points.geojson')
+            .then(res => res.json())
+            .then(data => {
+                geoJsonFeatures = data.features || [];
+                const geoJsonLayer = L.geoJSON(data, {
+                    pointToLayer: (feature, latlng) => L.marker(latlng, { icon: pfzIcon }),
+                    onEachFeature: (feature, layer) => {
+                        const props = feature.properties;
+                        layer.bindPopup(`<b>Potential Fishing Zone</b><br/>GPS: ${feature.geometry.coordinates[1].toFixed(4)}°N, ${feature.geometry.coordinates[0].toFixed(4)}°E<br/>SST: ${props.sst} °C | Chlorophyll: ${props.chl} mg/m³`);
+                    }
+                });
+                markers.addLayer(geoJsonLayer);
+                map.addLayer(markers);
+            })
+            .catch(() => setStatus("<em>GeoJSON load warning: Ensure pfz_points.geojson exists.</em>"));
+        applyLanguage("en");
+    </script>
+</body>
+</html>
