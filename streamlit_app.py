@@ -31,6 +31,22 @@ def calculate_distance(lat1, lon1, lat2, lon2):
     return radius_km * 2 * math.atan2(math.sqrt(value), math.sqrt(1 - value))
 
 
+def calculate_bearing(lat1, lon1, lat2, lon2):
+    lat1_rad, lat2_rad = math.radians(lat1), math.radians(lat2)
+    dlon = math.radians(lon2 - lon1)
+    x = math.sin(dlon) * math.cos(lat2_rad)
+    y = (
+        math.cos(lat1_rad) * math.sin(lat2_rad)
+        - math.sin(lat1_rad) * math.cos(lat2_rad) * math.cos(dlon)
+    )
+    return (math.degrees(math.atan2(x, y)) + 360) % 360
+
+
+def bearing_direction(bearing):
+    directions = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+    return directions[round(bearing / 45) % 8]
+
+
 def nearest_pfz(boat_lat, boat_lon):
     candidates = []
     for feature in load_pfz_features():
@@ -39,11 +55,14 @@ def nearest_pfz(boat_lat, boat_lon):
         if len(coordinates) < 2:
             continue
         latitude, longitude = float(coordinates[1]), float(coordinates[0])
+        bearing = calculate_bearing(boat_lat, boat_lon, latitude, longitude)
         candidates.append(
             {
                 "latitude": latitude,
                 "longitude": longitude,
                 "distance_km": calculate_distance(boat_lat, boat_lon, latitude, longitude),
+                "bearing_degrees": round(bearing, 1),
+                "direction": bearing_direction(bearing),
                 "sst_c": properties.get("sst"),
                 "chlorophyll_mg_m3": properties.get("chl"),
             }
